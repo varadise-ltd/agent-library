@@ -1,0 +1,41 @@
+{
+  "name": "varadise-agent-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node apps/control-plane/src/server.js",
+    "platform:export-markdown": "node scripts/export-platform-markdown.mjs",
+    "test": "node --test apps/control-plane/test/*.test.js apps/control-plane/test/*.test.mjs",
+    "platform:start": "docker compose up -d --build --force-recreate",
+    "platform:build": "docker compose build agent-platform",
+    "platform:stop": "docker compose down",
+    "platform:logs": "docker compose logs -f agent-platform postgres",
+    "platform:status": "docker compose ps",
+    "platform:import-files": "docker compose --profile tools run --rm data-import",
+    "db:start": "docker compose up -d postgres",
+    "db:stop": "docker compose stop postgres",
+    "db:logs": "docker compose logs -f postgres",
+    "db:migrate": "node scripts/migrate-to-postgres.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@phosphor-icons/web": "^2.1.2",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "busboy": "1.6.0",
+    "docx": "9.5.1",
+    "docxtemplater": "^3.69.3",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "1.1.1",
+    "pdfkit": "0.17.2",
+    "pg": "8.16.3",
+    "pizzip": "^3.2.0",
+    "pino": "9.14.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "pg-mem": "3.0.14"
+  }
+}

@@ -1,0 +1,27 @@
+node_modules/
+.pnpm-store/
+.env
+data/
+runtime-data/
+uploads/
+*.log
+# Local handover exports, runtime captures and generated QA artifacts
+/handover/
+tmp/
+.tmp/
+tmp-hermes-test/
+tmp-hermes-test2/
+.live-sales-deck-build-*/
+.sales-deck-build-*/
+*.bundle
+Sally-deliverable-template-filled.docx
+
+# Receiver secrets and local operational material
+.env.*
+!.env.example
+project-sources/
+outputs/
+*.dump
+*.sql
+*.pem
+*.key

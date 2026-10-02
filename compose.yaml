@@ -1,0 +1,115 @@
+name: varadiseagentlibrary
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: varadise
+      POSTGRES_USER: varadise
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - varadise-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U varadise -d varadise"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  agent-platform:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: varadiseagentlibrary-agent-platform:latest
+    restart: unless-stopped
+    command: ["node", "apps/control-plane/src/start-platform.mjs"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      VARADISE_RUNTIME_ENVIRONMENT: docker
+      # Stable child processes are the production default. Enable only for
+      # intentional bind-mounted development work.
+      VARADISE_DEV_WATCH: ${VARADISE_DEV_WATCH:-false}
+      DATA_BACKEND: postgres
+      DATA_DIR: /var/lib/varadise/data
+      RUNTIME_DIR: /var/lib/varadise/runtime
+      DATABASE_URL: postgresql://varadise:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/varadise
+      DATABASE_SSL: disable
+      HERMES_WHATSAPP_NODE: /usr/local/bin/node
+      HERMES_WHATSAPP_PAIR_SCRIPT: /app/apps/control-plane/src/whatsapp-pair.mjs
+      HERMES_WHATSAPP_PROJECT_BRIDGE_SCRIPT: /app/apps/control-plane/src/project-whatsapp-bridge.mjs
+      VARADISE_PDF_FONT: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+      VARADISE_PDF_FONT_FAMILY: NotoSansCJKhk-Regular
+      LIBREOFFICE_PATH: /usr/bin/soffice
+      DOCUMENT_CONVERSION_TIMEOUT_MS: 120000
+      PROJECT_SOURCE_ROOTS: /mnt/project-sources
+      HERMES_AGENT_MIDDLEWARE_PORT: 3010
+      HERMES_AGENT_MIDDLEWARE_MAX_REQUEST_BYTES: ${HERMES_AGENT_MIDDLEWARE_MAX_REQUEST_BYTES:-67108864}
+      HERMES_AGENT_MIDDLEWARE_HOST: 0.0.0.0
+      HERMES_AGENT_MIDDLEWARE_URL: http://127.0.0.1:3010/execute
+      HERMES_AGENT_CLI: ${HERMES_AGENT_CLI:-hermes}
+      HERMES_AGENT_VENDOR: nousresearch
+      HERMES_AGENT_CLI_PROVIDER: ${HERMES_AGENT_CLI_PROVIDER:-custom}
+      HERMES_AGENT_MIDDLEWARE_RUNTIME_KIND: ${HERMES_AGENT_MIDDLEWARE_RUNTIME_KIND:-local-cli}
+      # NousResearch Hermes' bare command is interactive. The current CLI
+      # exposes non-interactive execution through --cli -z PROMPT.
+      HERMES_AGENT_CLI_ARGS_JSON: '${HERMES_AGENT_CLI_ARGS_JSON:-["--cli","-z","{prompt}"]}'
+      HERMES_AGENT_CLI_INPUT_MODE: ${HERMES_AGENT_CLI_INPUT_MODE:-argument}
+      HERMES_AGENT_MIDDLEWARE_UPSTREAM: ${HERMES_AGENT_MIDDLEWARE_UPSTREAM:-}
+      HERMES_AGENT_MIDDLEWARE_UPSTREAM_SECRET: ${HERMES_AGENT_MIDDLEWARE_UPSTREAM_SECRET:-}
+      HERMES_AGENT_PASSTHROUGH_ENV: ${HERMES_AGENT_PASSTHROUGH_ENV:-}
+    ports:
+      # Original platform web port. Use PLATFORM_PORT so a shared .env PORT
+      # value cannot accidentally move this stack onto the second platform's
+      # port.
+      - "${PLATFORM_PORT:-3000}:3000"
+      # Keep Hermes middleware isolated per concurrently running platform.
+      # Override HERMES_HOST_PORT (for example 4100) when another stack owns
+      # the default host port 3010; the container port remains 3010.
+      - "127.0.0.1:${HERMES_HOST_PORT:-3010}:3010"
+    volumes:
+      - varadise-app-data:/var/lib/varadise/data
+      - varadise-runtime-data:/var/lib/varadise/runtime
+      - varadise-hermes-data:/home/node/.hermes
+      - ./apps:/app/apps:ro
+      - ./packages:/app/packages:ro
+      - ./scripts:/app/scripts:ro
+      - ./project-sources:/mnt/project-sources:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "Promise.all([fetch('http://127.0.0.1:3000/api/health'),fetch('http://127.0.0.1:3010/health')]).then(rs=>{if(rs.some(r=>!r.ok))process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+
+  data-import:
+    image: alpine:3.22
+    profiles: ["tools"]
+    volumes:
+      - ./data:/source/data:ro
+      - ./runtime-data:/source/runtime:ro
+      - varadise-app-data:/target/data
+      - varadise-runtime-data:/target/runtime
+    command: >-
+      sh -c "test ! -e /target/data/.docker-import-complete
+      && test ! -e /target/runtime/.docker-import-complete
+      && mkdir -p /target/data /target/runtime
+      && cp -a /source/data/. /target/data/
+      && cp -a /source/runtime/. /target/runtime/
+      && touch /target/data/.docker-import-complete /target/runtime/.docker-import-complete
+      && chown -R 1000:1000 /target/data /target/runtime"
+
+volumes:
+  varadise-postgres-data:
+  varadise-app-data:
+  varadise-runtime-data:
+  varadise-hermes-data:
